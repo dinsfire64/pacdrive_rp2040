@@ -1,19 +1,60 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
 
 #include "tusb.h"
 #include "pico/stdlib.h"
 
-#define PIN_ONBOARD_LED 25
+#define NUM_OF_LEDS 16
+#define HID_WRITE_SIZE 4
+
+// map of pins to pacdrive LED numbers
+// use -1 if not mapped.
+int pin_mapping[NUM_OF_LEDS] =
+    {
+        // starting with LED 1 -> 16
+        2,
+        3,
+        4,
+        5,
+
+        6,
+        7,
+        8,
+        9,
+
+        10,
+        11,
+        12,
+        13,
+
+        18,
+        19,
+        20,
+        21,
+};
+
+uint16_t current_led_state = 0;
 
 int main(void)
 {
-    gpio_init(PIN_ONBOARD_LED);
-    gpio_set_dir(PIN_ONBOARD_LED, GPIO_OUT);
-    gpio_put(PIN_ONBOARD_LED, 0);
+    // setup/init the pins.
+    for (int i = 0; i < NUM_OF_LEDS; i++)
+    {
+        if (pin_mapping[i])
+        {
+            gpio_init(pin_mapping[i]);
+            gpio_set_dir(pin_mapping[i], GPIO_OUT);
+
+            // start high just like the pacdrive.
+            gpio_put(pin_mapping[i], 1);
+        }
+    }
 
     stdio_init_all();
+    printf("\n\nStart " __DATE__ " "__TIME__
+           "\n\n");
 
     // init device stack on configured roothub port
     tud_init(BOARD_TUD_RHPORT);
@@ -79,14 +120,33 @@ void tud_hid_set_report_cb(uint8_t itf, uint8_t report_id, hid_report_type_t rep
     (void)report_id;
     (void)report_type;
 
-    if (bufsize == 4)
+    if (bufsize == HID_WRITE_SIZE)
     {
         // values are in [2] and [3]
         // 16 downto 1, active high.
-        printf("%02x %02x %02x %02x\n", buffer[0], buffer[1], buffer[2], buffer[3]);
+        // printf("%02x %02x %02x %02x\n", buffer[0], buffer[1], buffer[2], buffer[3]);
 
-        // tie LED #1 to the onboard LED.
-        gpio_put(PIN_ONBOARD_LED, buffer[3] & 0x01);
+        uint16_t incoming_state = (buffer[2] << 8) | buffer[3];
+
+        // only output on changes in state
+        // some games will write duplicate information.
+        if (incoming_state != current_led_state)
+        {
+            printf("%04x\n", incoming_state);
+
+            for (int i = 0; i < NUM_OF_LEDS; i++)
+            {
+                // active high values.
+                bool state = incoming_state & (1 << i);
+
+                if (pin_mapping[i])
+                {
+                    gpio_put(pin_mapping[i], state);
+                }
+            }
+
+            current_led_state = incoming_state;
+        }
     }
     else
     {

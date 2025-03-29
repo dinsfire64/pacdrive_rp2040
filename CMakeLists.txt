@@ -29,7 +29,7 @@ tinyusb_board
 
 pico_add_extra_outputs(${PROJECT_NAME})
 
-pico_enable_stdio_uart(${PROJECT_NAME} 1)
+pico_enable_stdio_uart(${PROJECT_NAME} 0)
 
 # add flash target (make flash)
 add_custom_target(flash DEPENDS ${PROJECT_NAME}.elf)
